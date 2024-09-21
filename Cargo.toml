@@ -20,6 +20,7 @@ dirs = "4.0"
 winreg = { version = "0.10" }
 windows = { version = "0.58", features = [
     "Win32_System_Com",
+    "Win32_Storage_Packaging_Appx",
     "Win32_Foundation",
     "Foundation_Collections",
     "ApplicationModel_Activation",

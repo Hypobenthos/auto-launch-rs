@@ -1,8 +1,10 @@
-use std::env;
-use std::path::Path;
-
 use crate::{AutoLaunch, Result};
 use ::windows::ApplicationModel::StartupTask;
+use windows::Win32::Foundation::{
+    APPMODEL_ERROR_NO_PACKAGE, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS,
+};
+use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
+use windows_core::PWSTR;
 use winreg::enums::RegType::REG_BINARY;
 use winreg::enums::{
     HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_ALL_ACCESS, KEY_READ, KEY_SET_VALUE,
@@ -19,23 +21,24 @@ static TASK_MANAGER_OVERRIDE_ENABLED_VALUE: [u8; 12] = [
     0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ];
 
-static PACKAGE_DIR: &str = r"PACKAGE_DIRECTORY";
-static WINDOWS_APPS_DIR: &str = r"\WindowsApps\";
+fn is_msix() -> bool {
+    unsafe {
+        let mut length: u32 = 0;
+        let result = GetCurrentPackageFullName(&mut length, PWSTR::null());
 
-fn is_msix_package(app_path: &str) -> bool {
-    let mut has_package_dir = false;
-    let mut in_windows_apps_dir = false;
+        if result == APPMODEL_ERROR_NO_PACKAGE {
+            return false;
+        }
 
-    if let Ok(package_dir) = env::var(PACKAGE_DIR) {
-        let path = Path::new(&package_dir);
-        has_package_dir = path.exists();
+        if result != ERROR_INSUFFICIENT_BUFFER {
+            return false;
+        }
+
+        let mut buffer = vec![0u16; length as usize];
+        let result = GetCurrentPackageFullName(&mut length, PWSTR::from_raw(buffer.as_mut_ptr()));
+
+        result == ERROR_SUCCESS
     }
-
-    if app_path.contains(WINDOWS_APPS_DIR) {
-        in_windows_apps_dir = true;
-    }
-
-    has_package_dir && in_windows_apps_dir
 }
 
 fn get_startup_task() -> windows_core::Result<StartupTask> {
@@ -72,8 +75,7 @@ impl AutoLaunch {
     /// - failed to open the registry key
     /// - failed to set value
     pub fn enable(&self) -> Result<()> {
-        let is_msix = is_msix_package(&self.app_path);
-        if is_msix {
+        if is_msix() {
             let task = get_startup_task()?;
             task.RequestEnableAsync()?.get()?;
             Ok(())
@@ -128,8 +130,7 @@ impl AutoLaunch {
     /// - failed to open the registry key
     /// - failed to delete value
     pub fn disable(&self) -> Result<()> {
-        let is_msix = is_msix_package(&self.app_path);
-        if is_msix {
+        if is_msix() {
             let task = get_startup_task()?;
             task.Disable()?;
             Ok(())
@@ -149,8 +150,7 @@ impl AutoLaunch {
 
     /// Check whether the AutoLaunch setting is enabled
     pub fn is_enabled(&self) -> Result<bool> {
-        let is_msix = is_msix_package(&self.app_path);
-        if is_msix {
+        if is_msix() {
             let task = get_startup_task()?;
             Ok(task.State()? == windows::ApplicationModel::StartupTaskState::Enabled)
         } else {
