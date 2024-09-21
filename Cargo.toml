@@ -18,3 +18,11 @@ dirs = "4.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = { version = "0.10" }
+windows = { version = "0.58", features = [
+    "Win32_System_Com",
+    "Win32_Foundation",
+    "Foundation_Collections",
+    "ApplicationModel_Activation",
+    "ApplicationModel",
+] }
+windows-core = { version = "0.58" }
